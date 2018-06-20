@@ -54,6 +54,10 @@ type Selector interface {
 
 	// Make a deep copy of the selector.
 	DeepCopySelector() Selector
+
+	// Check if the selector type can benefit from indexes (equals operation).
+	IsIndexable() bool
+	IndexableKeyAndValue() (bool, string, string)
 }
 
 // Everything returns a selector that matches all labels.
@@ -63,12 +67,14 @@ func Everything() Selector {
 
 type nothingSelector struct{}
 
-func (n nothingSelector) Matches(_ Labels) bool              { return false }
-func (n nothingSelector) Empty() bool                        { return false }
-func (n nothingSelector) String() string                     { return "" }
-func (n nothingSelector) Add(_ ...Requirement) Selector      { return n }
-func (n nothingSelector) Requirements() (Requirements, bool) { return nil, false }
-func (n nothingSelector) DeepCopySelector() Selector         { return n }
+func (n nothingSelector) Matches(_ Labels) bool                        { return false }
+func (n nothingSelector) Empty() bool                                  { return false }
+func (n nothingSelector) String() string                               { return "" }
+func (n nothingSelector) Add(_ ...Requirement) Selector                { return n }
+func (n nothingSelector) Requirements() (Requirements, bool)           { return nil, false }
+func (n nothingSelector) DeepCopySelector() Selector                   { return n }
+func (n nothingSelector) IsIndexable() bool                            { return false }
+func (n nothingSelector) IndexableKeyAndValue() (bool, string, string) { return false, "", "" }
 
 // Nothing returns a selector that matches no labels
 func Nothing() Selector {
@@ -95,6 +101,25 @@ func (s internalSelector) DeepCopy() internalSelector {
 
 func (s internalSelector) DeepCopySelector() Selector {
 	return s.DeepCopy()
+}
+
+func (s internalSelector) IsIndexable() bool {
+	if len(s) != 1 {
+		return false
+	}
+	for _, r := range s {
+		if !r.IsIndexable() {
+			return false
+		}
+	}
+	return true
+}
+
+func (s internalSelector) IndexableKeyAndValue() (bool, string, string) {
+	if s.IsIndexable() {
+		return true, s[0].Key(), s[0].Values().List()[0]
+	}
+	return false, "", ""
 }
 
 // ByKey sorts requirements by key to obtain deterministic parser
@@ -173,6 +198,16 @@ func NewRequirement(key string, op selection.Operator, vals []string) (*Requirem
 func (r *Requirement) hasValue(value string) bool {
 	for i := range r.strValues {
 		if r.strValues[i] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Requirement) IsIndexable() bool {
+	if len(r.strValues) == 1 {
+		switch r.operator {
+		case selection.In, selection.Equals, selection.DoubleEquals:
 			return true
 		}
 	}

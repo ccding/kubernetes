@@ -44,6 +44,13 @@ func ListAll(store Store, selector labels.Selector, appendFn AppendFunc) error {
 }
 
 func ListAllByNamespace(indexer Indexer, namespace string, selector labels.Selector, appendFn AppendFunc) error {
+	indexable, key, value := selector.IndexableKeyAndValue()
+	if indexable {
+		// TODO: use label index to filter from pods
+		_ = key
+		_ = value
+	}
+
 	if namespace == metav1.NamespaceAll {
 		for _, m := range indexer.List() {
 			metadata, err := meta.Accessor(m)
